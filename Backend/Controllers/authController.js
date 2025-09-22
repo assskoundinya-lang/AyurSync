@@ -74,3 +74,5 @@ async function logout(req, res) {
 }
 
 module.exports = { signup, login, logout };
+
+
