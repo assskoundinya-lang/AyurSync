@@ -5,6 +5,7 @@ import { DietPlanGenerator } from './components/DietPlanGenerator';
 import { RecipeDatabase } from './components/RecipeDatabase';
 import { ReportsGeneration } from './components/ReportsGeneration';
 import { Topbar } from './components/Topbar';
+import { Auth } from './components/Auth';
 import { 
   LayoutDashboard, 
   Users, 
@@ -23,6 +24,7 @@ const menuItems = [
 
 export default function App() {
   const [activeSection, setActiveSection] = useState('dashboard');
+  const [isAuthed, setIsAuthed] = useState(!!localStorage.getItem('token'));
 
   // Scroll animation effect
   useEffect(() => {
@@ -72,6 +74,10 @@ export default function App() {
         return <Dashboard />;
     }
   };
+
+  if (!isAuthed) {
+    return <Auth onAuthenticated={() => setIsAuthed(true)} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#FEFEFE] via-[#D5D8AB]/30 to-[#84A15D]/20 texture-overlay" style={{ fontFamily: 'Georgia, serif' }}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -33,47 +33,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Checkbox } from './ui/checkbox';
 
-const initialPatients = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    age: 34,
-    email: "sarah.j@email.com",
-    phone: "+1 (555) 123-4567",
-    dosha: "Vata-Pitta",
-    lastVisit: "2024-01-15",
-    status: "Active",
-    avatar: "/api/placeholder/32/32",
-    goals: "Weight management, digestive health",
-    progress: 78
-  },
-  {
-    id: 2,
-    name: "Michael Chen",
-    age: 42,
-    email: "m.chen@email.com",
-    phone: "+1 (555) 234-5678",
-    dosha: "Pitta",
-    lastVisit: "2024-01-12",
-    status: "Follow-up",
-    avatar: "/api/placeholder/32/32",
-    goals: "Energy balance, stress management",
-    progress: 85
-  },
-  {
-    id: 3,
-    name: "Emma Davis",
-    age: 28,
-    email: "emma.davis@email.com",
-    phone: "+1 (555) 345-6789",
-    dosha: "Kapha",
-    lastVisit: "2024-01-10",
-    status: "Active",
-    avatar: "/api/placeholder/32/32",
-    goals: "Metabolism boost, immunity",
-    progress: 62
-  }
-];
+import { createPatient as apiCreatePatient, listPatients as apiListPatients } from '../api.patients';
+
+const initialPatients: any[] = [];
 
 const doshaQualities = {
   "Vata": {
@@ -353,8 +315,41 @@ const PatientForm = ({ onSave }) => {
 export function PatientManagement() {
   const [patients, setPatients] = useState(initialPatients);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedPatientId, setSelectedPatientId] = useState(1);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | number | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refreshPatients() {
+    try {
+      setLoading(true);
+      const rows = await apiListPatients();
+      const mapped = rows.map((p: any) => ({
+        id: p.id,
+        name: p.full_name,
+        age: p.date_of_birth ? (new Date().getFullYear() - new Date(p.date_of_birth).getFullYear()) : '-',
+        email: p.email,
+        phone: p.phone_number,
+        dosha: '—',
+        lastVisit: p.created_at,
+        status: 'Active',
+        avatar: '/api/placeholder/32/32',
+        goals: p.health_diet?.primary_health_concerns?.join?.(', ') || '' ,
+        progress: 0
+      }));
+      setPatients(mapped);
+      if (mapped.length && !selectedPatientId) setSelectedPatientId(mapped[0].id);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to load patients');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshPatients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredPatients = patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -363,33 +358,39 @@ export function PatientManagement() {
 
   const currentPatient = patients.find(p => p.id === selectedPatientId) || patients[0];
 
-  const handleSavePatient = (newPatientData) => {
-    // Generate a unique ID for the new patient
-    const newId = patients.length > 0 ? Math.max(...patients.map(p => p.id)) + 1 : 1;
-
-    // Create the new patient object with default values
-    const newPatient = {
-      id: newId,
-      name: newPatientData.fullName,
-      age: new Date().getFullYear() - new Date(newPatientData.dob).getFullYear(),
-      email: newPatientData.email,
-      phone: newPatientData.phone,
-      dosha: "Pending", // You'd calculate this from the dosha answers
-      lastVisit: new Date().toISOString().split('T')[0],
-      status: "New",
-      avatar: "/api/placeholder/32/32", // Placeholder avatar
-      goals: newPatientData.primaryConcerns,
-      progress: 0,
-    };
-
-    // Update the state with the new patient added to the array
-    setPatients(prevPatients => [...prevPatients, newPatient]);
-
-    // Set the new patient as the currently selected one
-    setSelectedPatientId(newId);
-
-    // Close the dialog
-    setIsFormOpen(false);
+  const handleSavePatient = async (newPatientData: any) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = {
+        full_name: newPatientData.fullName,
+        date_of_birth: newPatientData.dob || null,
+        gender: newPatientData.gender || null,
+        occupation: newPatientData.occupation || null,
+        weight: newPatientData.weight ? Number(newPatientData.weight) : null,
+        height: newPatientData.height ? Number(newPatientData.height) : null,
+        email: newPatientData.email || null,
+        phone_number: newPatientData.phone || null,
+        dosha_assessment: newPatientData.doshaAnswers || {},
+        health_diet: {
+          primary_health_concerns: newPatientData.primaryConcerns ? [newPatientData.primaryConcerns] : [],
+          current_symptoms: newPatientData.currentSymptoms || [],
+          medications: newPatientData.medications ? [newPatientData.medications] : [],
+          meal_frequency: newPatientData.mealFrequency || '',
+          diet_type: newPatientData.dietType || '',
+          allergies: newPatientData.allergies ? [newPatientData.allergies] : [],
+          water_intake: newPatientData.waterIntake || '',
+          cooking_skills: newPatientData.cookingSkills || ''
+        }
+      };
+      await apiCreatePatient(payload);
+      await refreshPatients();
+      setIsFormOpen(false);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to save patient');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -420,6 +421,11 @@ export function PatientManagement() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {error && (
+          <div className="lg:col-span-3 p-3 border border-red-300 bg-red-50 text-red-700 rounded">
+            {error}
+          </div>
+        )}
         {/* Patient List */}
         <Card className="card-rustic animate-slide-in-left">
           <CardHeader>

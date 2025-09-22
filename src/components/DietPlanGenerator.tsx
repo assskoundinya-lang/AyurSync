@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { listPatients, generateDiet, getDietPlans } from '../api.patients';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -314,12 +315,28 @@ const dietTypes = [
 const doshaOptions = ['Vata', 'Pitta', 'Kapha', 'Vata-Pitta', 'Pitta-Kapha', 'Vata-Kapha'];
 
 export function DietPlanGenerator() {
-  const [selectedPatient, setSelectedPatient] = useState('sarah-johnson');
+  const [patients, setPatients] = useState<any[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<string>('');
   const [selectedDosha, setSelectedDosha] = useState('Vata-Pitta');
   const [selectedDietType, setSelectedDietType] = useState('Vegetarian');
   const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
   const [maxCookTime, setMaxCookTime] = useState('30');
   const [activeDay, setActiveDay] = useState('Monday');
+  const [plan, setPlan] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await listPatients();
+        setPatients(rows);
+        if (rows.length) setSelectedPatient(rows[0].id);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || err?.message || 'Failed to load patients');
+      }
+    })();
+  }, []);
 
   const handleAllergyChange = (allergy: string, checked: boolean) => {
     if (checked) {
@@ -329,11 +346,27 @@ export function DietPlanGenerator() {
     }
   };
 
-  const currentDayMeals = sampleMealPlan[activeDay as keyof typeof sampleMealPlan] || {};
+  const currentDayMeals = plan
+    ? (plan.days?.[weekDays.indexOf(activeDay)] || {})
+    : sampleMealPlan[activeDay as keyof typeof sampleMealPlan] || {};
 
   const totalCalories = currentDayMeals && Object.keys(currentDayMeals).length > 0 
     ? Object.values(currentDayMeals).reduce((total, meal) => total + meal.calories, 0)
     : 0;
+
+  async function handleGenerate() {
+    if (!selectedPatient) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const diet = await generateDiet(selectedPatient);
+      setPlan(diet.plan || diet);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to generate plan');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -351,9 +384,9 @@ export function DietPlanGenerator() {
             <Download className="w-4 h-4 mr-2" />
             Download Plan
           </Button>
-          <Button className="btn-rustic">
+          <Button className="btn-rustic" onClick={handleGenerate} disabled={!selectedPatient || loading}>
             <Plus className="w-4 h-4 mr-2" />
-            Generate New Plan
+            {loading ? 'Generating…' : 'Generate New Plan'}
           </Button>
         </div>
       </div>
@@ -375,9 +408,11 @@ export function DietPlanGenerator() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sarah-johnson">Sarah Johnson</SelectItem>
-                  <SelectItem value="michael-chen">Michael Chen</SelectItem>
-                  <SelectItem value="emma-davis">Emma Davis</SelectItem>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.full_name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -462,6 +497,9 @@ export function DietPlanGenerator() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {error && (
+                <div className="mb-3 p-3 border border-red-300 bg-red-50 text-red-700 rounded">{error}</div>
+              )}
               <div className="flex space-x-2 overflow-x-auto pb-2">
                 {weekDays.map((day) => (
                   <Button

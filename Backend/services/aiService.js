@@ -31,14 +31,23 @@ Return only the JSON (no extra commentary).
   `;
 
   // Use the Chat Completion / Responses
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini', // choose a suitable model or gpt-4o if available
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 900
-  });
-
-  // Depending on response shape; adapt if using different SDK version
-  const content = response.choices?.[0]?.message?.content || response.choices?.[0]?.text;
+  // Prefer Responses API if available, else fallback to chat.completions
+  let content;
+  try {
+    const resp = await openai.responses.create({
+      model: 'gpt-4o-mini',
+      input: prompt,
+      max_output_tokens: 900
+    });
+    content = resp?.output_text;
+  } catch (_) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 900
+    });
+    content = response.choices?.[0]?.message?.content || response.choices?.[0]?.text;
+  }
 
   // Try to parse JSON from model output
   try {

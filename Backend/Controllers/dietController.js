@@ -11,8 +11,26 @@ async function generateDiet(req, res) {
     if (!patients || patients.length === 0) return res.status(404).json({ message: 'Patient not found' });
 
     const patient = patients[0];
-    // Call AI
-    const planJSON = await generateDietPlan(patient);
+    // Call AI with safer fallback
+    let planJSON;
+    try {
+      planJSON = await generateDietPlan(patient);
+    } catch (aiErr) {
+      console.error('AI generation failed, returning fallback plan:', aiErr.message);
+      // Minimal safe fallback structure
+      planJSON = {
+        overview: 'Fallback plan due to AI error. Please try again later.',
+        days: Array.from({ length: 7 }).map((_, i) => ({
+          day: `Day ${i + 1}`,
+          breakfast: 'Warm oatmeal with spices',
+          mid_morning: 'Herbal tea',
+          lunch: 'Khichdi with ghee and steamed vegetables',
+          snack: 'Soaked almonds',
+          dinner: 'Light vegetable soup',
+          notes: ['Hydrate well', 'Gentle walk after meals']
+        }))
+      };
+    }
 
     const planId = uuidv4();
     const row = {
